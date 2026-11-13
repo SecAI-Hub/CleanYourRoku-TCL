@@ -1,103 +1,55 @@
-"""Pull app icons from your own Roku for the CleanYourRoku launcher.
+"""Fetch only configured app logos directly from the selected TCL; never run a server."""
+import argparse
+import io
+import warnings
+from build import validate_settings, ROOT
+import json
+from tv_connection import Connection
 
-Reads the app list in components/HomeScene.xml, asks your Roku for each app's
-icon over the local network (ECP, port 8060), and saves them as
-images/app_<id>.png. Logos stay on your machine; .gitignore keeps them out of
-the repo.
 
-Usage:
-    python3 scripts/pull_logos.py --roku <ROKU_IP> --list   # show installed apps and their IDs
-    python3 scripts/pull_logos.py --roku <ROKU_IP>          # download icons for the launcher's apps
-
-You can also set ROKU_IP in your environment instead of passing --roku.
-Uses the Python standard library. On a Mac, non-PNG icons are converted with sips.
-If Pillow is installed (pip3 install pillow), each logo also gets rounded corners
-(7% of its width) to match the launcher's tiles. Without it, logos stay square.
-"""
-import argparse, os, re, shutil, subprocess, sys, urllib.error, urllib.request
-import xml.etree.ElementTree as ET
-
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCENE = os.path.join(ROOT, "components", "HomeScene.xml")
-IMAGES = os.path.join(ROOT, "images")
-CORNER = 0.07  # corner radius as a share of the logo's width, same as the launcher's tiles
-
-def round_corners(path):
-    # Returns False when Pillow isn't installed, so the logo is left as downloaded
+def png_logo(data):
     try:
-        from PIL import Image, ImageChops, ImageDraw
-    except ImportError:
-        return False
-    img = Image.open(path).convert("RGBA")
-    w, h = img.size
-    s = 4  # draw the mask 4x larger, then shrink it, for smooth edges
-    mask = Image.new("L", (w * s, h * s), 0)
-    ImageDraw.Draw(mask).rounded_rectangle((0, 0, w * s - 1, h * s - 1), radius=w * CORNER * s, fill=255)
-    mask = mask.resize((w, h), Image.LANCZOS)
-    img.putalpha(ImageChops.darker(img.getchannel("A"), mask))  # keeps any transparency the logo already had
-    out = Image.new("RGBA", img.size)  # a fresh image carries no metadata
-    out.paste(img)
-    out.save(path, "PNG", optimize=True)
-    return True
+        from PIL import Image
+    except ImportError as error:
+        raise ValueError("Install the optional hash-pinned requirements-artwork.txt for local logo conversion") from error
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", Image.DecompressionBombWarning)
+        with Image.open(io.BytesIO(data), formats=["PNG", "JPEG", "WEBP"]) as image:
+            if max(image.size) > 2048 or min(image.size) < 1 or getattr(image, "n_frames", 1) != 1:
+                raise ValueError("logo must be a single image of at most 2048 pixels per side")
+            image.load()
+            clean = Image.new("RGBA", image.size)
+            clean.paste(image.convert("RGBA"))
+            output = io.BytesIO()
+            clean.save(output, "PNG", optimize=True)
+            if output.tell() > 1048576:
+                raise ValueError("converted logo exceeds 1 MiB")
+            return output.getvalue()
 
-def get(roku, path):
-    try:
-        with urllib.request.urlopen("http://" + roku + ":8060" + path, timeout=5) as r:
-            return r.read(), r.headers.get("Content-Type", "")
-    except urllib.error.HTTPError as e:
-        if e.code == 403:
-            sys.exit("403 Forbidden: your Roku is blocking network control. Set Settings > System > "
-                     "Advanced system settings > Control by mobile apps > Network access to Permissive. "
-                     "See docs/faq.md.")
-        raise
-    except urllib.error.URLError as e:
-        sys.exit("Couldn't reach a Roku at " + roku + " (" + str(e.reason) + "). Check the IP address "
-                 "in Settings > Network > About, and that this computer is on the same Wi-Fi.")
-
-def installed(roku):
-    body, _ = get(roku, "/query/apps")
-    return {a.get("id"): a.text for a in ET.fromstring(body).iter("app")}
-
-def launcher_apps():
-    # Matches entries like ["Netflix", "12"] in HomeScene.xml; numeric IDs only (skips the "uxd" tile)
-    with open(SCENE) as f:
-        return re.findall(r'\["([^"]+)",\s*"(\d+)"\]', f.read())
 
 def main():
-    p = argparse.ArgumentParser(description="Pull app icons from your Roku for the CleanYourRoku launcher.")
-    p.add_argument("--roku", default=os.environ.get("ROKU_IP"), help="your Roku's IP address")
-    p.add_argument("--list", action="store_true", help="list installed apps and their IDs, then exit")
-    args = p.parse_args()
-    if not args.roku:
-        p.error("give your Roku's IP with --roku <ROKU_IP> or set ROKU_IP")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--host", required=True, help="private IPv4 address of the TCL 65R635")
+    args = parser.parse_args()
+    settings = validate_settings(json.loads((ROOT / "launcher.json").read_text()))
+    connection = Connection(args.host)
+    try:
+        info = connection.verify_model()
+        if info["ecp-setting-mode"] != "enabled":
+            raise ValueError("ECP Enabled is needed for this one-time icon fetch; Permissive is unnecessary")
+        installed = connection.installed()
+        for app in settings["apps"]:
+            if app["id"] not in installed:
+                raise ValueError("configured app is not installed: " + app["name"])
+            data = png_logo(connection.read("/query/icon/" + app["id"]))
+            target = ROOT / "images" / ("app_" + app["id"] + ".png")
+            if target.is_symlink():
+                raise ValueError("logo destination is a symbolic link")
+            target.write_bytes(data)
+            print("Saved local logo: " + app["name"])
+    except (ValueError, OSError) as error:
+        parser.exit(2, str(error) + "\n")
 
-    apps = installed(args.roku)
-    if args.list:
-        for app_id, name in sorted(apps.items(), key=lambda x: (x[1] or "").lower()):
-            print(app_id.rjust(8), " ", name)
-        return
-
-    os.makedirs(IMAGES, exist_ok=True)
-    rounded = None
-    for name, app_id in launcher_apps():
-        if app_id not in apps:
-            print("skip   ", name, "(" + app_id + ") is not installed on this Roku")
-            continue
-        data, ctype = get(args.roku, "/query/icon/" + app_id)
-        out = os.path.join(IMAGES, "app_" + app_id + ".png")
-        if "png" in ctype or not shutil.which("sips"):
-            with open(out, "wb") as f:
-                f.write(data)
-        else:
-            tmp = out + ".download"
-            with open(tmp, "wb") as f:
-                f.write(data)
-            subprocess.run(["sips", "-s", "format", "png", tmp, "--out", out], capture_output=True)
-            os.remove(tmp)
-        rounded = round_corners(out)
-        print("saved  ", name, "->", os.path.relpath(out, ROOT))
-    if rounded is False:
-        print("Logos are square. For rounded corners like the launcher's tiles: pip3 install pillow, then run this again.")
 
 if __name__ == "__main__":
     main()

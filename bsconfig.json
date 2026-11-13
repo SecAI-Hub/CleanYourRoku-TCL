@@ -1,0 +1,6 @@
+{
+  "rootDir": ".",
+  "files": ["manifest", "appsettings.json", "source/main.brs", "components/*.xml", "components/*.brs", "images/clean_*.png", "images/app_*.png", "images/app_*.jpg"],
+  "createPackage": false,
+  "deploy": false
+}

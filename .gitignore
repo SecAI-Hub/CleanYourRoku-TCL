@@ -256,3 +256,10 @@ images/mychannel/qr_*.png
 # These QR codes hold only public links and the app needs them
 !images/mychannel/qr_about_*.png
 !images/mychannel/qr_recipe_*.png
+
+# Hardened native build output and local-only logos
+node_modules/
+out/
+appsettings.json
+.roku-deploy-staging/
+images/app_*.jpg

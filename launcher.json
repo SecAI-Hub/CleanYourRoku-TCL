@@ -1,0 +1,11 @@
+{
+  "title": "Your apps",
+  "show_clock": true,
+  "show_date": true,
+  "clock_format": "12h",
+  "accent_color": "0xA9C7FFFF",
+  "apps": [
+    {"name": "Netflix", "id": "12"},
+    {"name": "Hulu", "id": "2285"}
+  ]
+}

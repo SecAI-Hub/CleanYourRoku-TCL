@@ -1,0 +1,11 @@
+{
+  "name": "cleanyourroku-tcl",
+  "private": true,
+  "version": "1.2.0",
+  "scripts": {
+    "check": "bsc --project bsconfig.json",
+    "test": "python3 -m unittest discover -s tests",
+    "build": "python3 scripts/build.py"
+  },
+  "devDependencies": {"brighterscript": "0.73.8"}
+}
