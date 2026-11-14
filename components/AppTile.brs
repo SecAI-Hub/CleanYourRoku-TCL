@@ -22,7 +22,7 @@ sub showFocus()
     amount = m.top.focusPercent
     if not m.top.gridHasFocus then amount = 0
     m.focus.opacity = amount
-    scale = 1.0 + 0.035 * amount
-    m.top.scale = [scale, scale]
+    ' Keep the focus border inside the grid cell so outer corners are not clipped.
+    m.top.scale = [1.0, 1.0]
     m.top.opacity = 0.78 + 0.22 * amount
 end sub

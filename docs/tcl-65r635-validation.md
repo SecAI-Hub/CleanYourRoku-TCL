@@ -22,5 +22,19 @@ SHA256 is `9e4e472dc2504292c3ae9f8d8545f21e216542355a7e24414823166caa3ee1d1`.
 
 ## Hardened build
 
-Source/package tests and actual deployment results are recorded before delivery.
-A successful probe does not replace rechecking the final native UI and app launches.
+Version 1.2.1 was installed with the official developer installer. The installer
+confirmed 119,582 bytes and Install Success, and ECP confirmed CleanYourRoku 1.2.1.
+The actual on-TV screenshot showed the local app grid, correct clock/date, both
+local logos, and complete focus borders. Both tiles launched the expected app,
+Home returned to Roku Home, and the custom channel reopened afterward.
+
+BrighterScript 0.73.8 validation and all 10 package/configuration/connector/logo
+boundary tests passed. The personal package SHA256 is
+`522f9ac98ba89c2415216e1fa2f80bbc8f263ac32ab2c6de6cd228098954dda9`.
+Personal logos stay local, so a clean-source build with placeholder artwork has a
+different package hash. Runtime emitted one benign unused catch-variable warning;
+no startup error prevented the UI or either launch path.
+
+The final least-access check restores the original ECP Limited mode and verifies
+native app launches using the physical remote. Its result is recorded separately
+from the computer-driven checks performed with ECP Enabled.

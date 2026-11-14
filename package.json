@@ -1,7 +1,7 @@
 {
   "name": "cleanyourroku-tcl",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.2.1",
   "scripts": {
     "check": "bsc --project bsconfig.json",
     "test": "python3 -m unittest discover -s tests",
